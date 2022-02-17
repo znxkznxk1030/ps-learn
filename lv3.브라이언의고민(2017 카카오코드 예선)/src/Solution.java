@@ -6,77 +6,198 @@ import java.util.Map;
 import java.util.Set;
 
 public class Solution {
-  Set<String> dup = new HashSet<>();
+    Set<String> dup = new HashSet<>();
+    Map<Character, List<Integer>> signIdxMap;
 
-  public String findBracket(String sentence) {
-    Map<String, Integer> hist = new HashMap<>();
 
-    char[] chArr = sentence.toCharArray();
-
-    for (char ch : chArr) {
-      if (Character.isUpperCase(ch))
-        continue;
-
-      String key = "" + ch;
-      if (hist.containsKey(key)) {
-        hist.put(key, hist.get(key) + 1);
-      } else {
-        hist.put(key, 1);
-      }
+    class DecrpytException extends RuntimeException {
+        public DecrpytException(String msg) {
+            super(msg);
+        }
     }
 
-    StringBuilder sb = new StringBuilder();
+    private Map<Character, List<Integer>> findSignIdxMap(char[] chArr) {
+        Map<Character, List<Integer>> signIdxMap = new HashMap<>();
 
-    for (String key : hist.keySet()) {
-      if (hist.get(key) == 2) {
-        sb.append(key);
-      }
+        for (int idx = 0; idx < chArr.length; idx++) {
+            char ch = chArr[idx];
+            if (!signIdxMap.containsKey(ch)) {
+                signIdxMap.put(ch, new ArrayList<>());
+            }
+
+            signIdxMap.get(ch).add(idx);
+        }
+
+        return signIdxMap;
     }
 
-    return sb.toString();
-  }
-
-  public String case1(String word) throws Exception {
-    char[] chArr = word.toCharArray();
-    char sp = '@';
-
-    if (!Character.isUpperCase(chArr[0]))
-      throw new Exception();
-
-    if (chArr.length == 1) {
-      return "" + chArr[0];
+    private boolean isAllUpper(String sentence) {
+        return isAllUpper(sentence.toCharArray());
     }
 
-    StringBuilder sb = new StringBuilder();
+    private boolean isAllUpper(char[] chArr) {
+        for (char ch : chArr) {
+            if (!Character.isUpperCase(ch)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-    for (int i = 0; i < chArr.length; i++) {
+    private boolean isEvenSeperator(List<Integer> seperatorIndex) {
+        // AbAbAbAbAbA
+        if (seperatorIndex.size() <= 1)
+            return true;
+
+        Integer prev = seperatorIndex.get(0);
+
+        for (int i = 1; i < seperatorIndex.size(); i++) {
+            Integer curr = seperatorIndex.get(i);
+            if (curr - prev != 2)
+                return false;
+            prev = curr;
+        }
+
+        return true;
+    }
+
+    private boolean isCaseFirst(String subSentence) {
+        char sp = subSentence.charAt(1);
+        List<Integer> spIndex = signIdxMap.get(sp);
+
+        if (!isEvenSeperator(spIndex)) {
+            return false;
+        }
+
+        Integer stIndex = spIndex.get(0) - 1;
+        Integer edIndex = spIndex.get(spIndex.size() - 1) + 1;
+        Integer length = (edIndex - stIndex + 1);
+
+        if (length != subSentence.length()) {
+            return false;
+        }
+        return true;
 
     }
 
-    return sb.toString();
-  }
+    private boolean hasBlank(char[] chArr) {
 
-  public String parse(String sentence) throws Exception {
-    String brackets = findBracket(sentence);
-    String[] words = sentence.split("[" + brackets + "]");
+        for (char ch: chArr) {
+            if (ch == ' ') return true;
+        }
 
-    List<String> answer = new ArrayList<>();
 
-    for (String word : words) {
-      if (word.length() == 0)
-        continue;
-
-      answer.add(case1(word));
+        return false;
     }
 
-    return String.join(" ", answer);
-  }
+    public String parse(String sentence, int stIdx) throws DecrpytException, NullPointerException {
+        if (stIdx >= sentence.length()) return "";
 
-  public String solution(String sentence) {
-    try {
-      return parse(sentence);
-    } catch (Exception e) {
-      return "invalid";
+        char[] chArr = sentence.toCharArray();
+        if (hasBlank(chArr)) {
+            throw new DecrpytException("blank");
+        }
+        signIdxMap = findSignIdxMap(chArr);
+        List<String> words = new ArrayList<>();
+
+        char fCh = sentence.charAt(stIdx);
+
+        if (Character.isLowerCase(fCh)) {
+            List<Integer> signIndex = signIdxMap.get(fCh);
+            signIdxMap.remove(fCh);
+
+            if (signIndex.size() == 2) {
+                // case 2
+                String subSentence = sentence.substring(signIndex.get(0) + 1, signIndex.get(1));
+                if (subSentence.length() > 0 && isAllUpper(subSentence)) {
+                    // aBBBa => BBB
+                    words.add(subSentence);
+                } else if (subSentence.length()>= 3) {
+                    // aBcBcBa => BcBcB => BBB
+                    if (isCaseFirst(subSentence)) {
+                        // BaBaB => BBB
+                        words.add(subSentence.replaceAll("[a-z]", ""));
+                    } else {
+                        throw new DecrpytException("aBcca");
+                    }
+                } else {
+                    // aBca
+                    throw new DecrpytException("aBca");
+                }
+
+            } else {
+                // aBBBBaCa
+                throw new DecrpytException("aBBBBaCa");
+            }
+
+            // aBcBcBaXXXXXX => BBB parse("XXXXXX")
+            Integer lastSignIndex = signIndex.get(signIndex.size() - 1);
+            words.add(parse(sentence, lastSignIndex + 1));
+        } else {
+            if (sentence.length() - stIdx == 1) {
+                // A
+                words.add(sentence.substring(stIdx, stIdx + 1));
+            } else {
+                char sCh = sentence.charAt(stIdx + 1);
+
+                if (Character.isUpperCase(sCh)) {
+                    // AAABaBaB => AAA parse(BaBaB)
+                    int i = 1;
+                    for (; i + stIdx < chArr.length; i++) {
+                        char ch = chArr[stIdx + i];
+                        if (!Character.isUpperCase(ch)) {
+                            if (signIdxMap.get(ch).size() == 2) {
+                                words.add(sentence.substring(stIdx, stIdx + i));
+                                words.add(parse(sentence, stIdx + i));
+                                break;
+                            }
+                            words.add(sentence.substring(stIdx, stIdx + i - 1));
+                            words.add(parse(sentence, stIdx + i - 1));
+                            break;
+                        }
+                    }
+
+                    if (i + stIdx == chArr.length) {
+                        words.add(sentence.substring(stIdx));
+                    }
+                } else {
+                    // AaBaA
+                    List<Integer> signIndex = signIdxMap.get(sCh);
+
+                    if (signIndex.size() == 2) {
+                        // AaBa => A aBa => A B
+                        signIdxMap.remove(sCh);
+                        words.add(sentence.substring(stIdx, stIdx + 1));
+                        words.add(parse(sentence, stIdx + 1));
+                    } else {
+                        // AbAbAXXXX => AAA parse(XXXX)
+                        Integer endIndex = signIndex.get(signIndex.size() - 1) + 1;
+                        String word = sentence.substring(stIdx, endIndex + 1);
+                        if (!isCaseFirst(word)) {
+                            // AbAbAb
+                            throw new DecrpytException("AbAbAb");
+                        }
+                        signIdxMap.remove(sCh);
+                        words.add(word.replaceAll("[a-z]", ""));
+                        words.add(parse(sentence, endIndex + 1));
+                    }
+                }
+            }
+        }
+
+        // System.out.println(String.join(" ", words).trim());
+        return String.join(" ", words).trim();
     }
-  }
+
+    public String solution(String sentence) {
+        try {
+            return parse(sentence, 0);
+        } catch (DecrpytException e) {
+            System.out.println("error : " + e.getMessage());
+            return "invalid";
+        } catch (NullPointerException e) {
+            System.out.println(e.getMessage());
+            return "invalid";
+        }
+    }
 }
